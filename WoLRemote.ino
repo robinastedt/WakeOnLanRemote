@@ -58,7 +58,7 @@ void setup() {
   initializeTimer4();
   
   parseTargetMAC();
-  printTargetMAC();
+  if (DEBUG) printTargetMAC();
 
   // check for the presence of the shield:
   if (WiFi.status() == WL_NO_SHIELD) {
