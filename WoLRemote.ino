@@ -2,6 +2,7 @@
 #include <SPI.h>
 #include <WiFi101.h>
 #include <WiFiUdp.h>
+#include <Adafruit_ZeroTimer.h>
 
 #include "arduino_secrets.h"
 
@@ -26,6 +27,8 @@ volatile byte button2State = LOW;
 volatile byte statusLEDState = LOW;
 int statusLEDCounter = 0;
 const int buttonPollingInterval = 100;
+
+Adafruit_ZeroTimer zt3 = Adafruit_ZeroTimer(3);
 
 enum PROGRAM_STATE {
   INITIALIZING,
@@ -53,9 +56,7 @@ void setup() {
   pinMode(button1Pin, INPUT_PULLUP);
   pinMode(button2Pin, INPUT_PULLUP);
 
-
-  // initialize timer
-  initializeTimer4();
+  initializeTimer();
   
   parseTargetMAC();
   if (DEBUG) printTargetMAC();
@@ -104,88 +105,45 @@ void setup() {
   }
 }
 
-void initializeTimer4() {
-  // Set up the generic clock (GCLK4) used to clock timers
-  REG_GCLK_GENDIV = GCLK_GENDIV_DIV(3) |          // Divide the 48MHz clock source by divisor 3: 48MHz/3=16MHz
-                    GCLK_GENDIV_ID(4);            // Select Generic Clock (GCLK) 4
-  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
+void initializeTimer() {
+  zt3.configure((tc_clock_prescaler)(384),//TC_CLOCK_PRESCALER_DIV2,
+                TC_COUNTER_SIZE_16BIT,
+                TC_WAVE_GENERATION_NORMAL_FREQ
+  );
 
-  REG_GCLK_GENCTRL = GCLK_GENCTRL_IDC |           // Set the duty cycle to 50/50 HIGH/LOW
-                     GCLK_GENCTRL_GENEN |         // Enable GCLK4
-                     GCLK_GENCTRL_SRC_DFLL48M |   // Set the 48MHz clock source
-                     GCLK_GENCTRL_ID(4);          // Select GCLK4
-  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
-
-  // Feed GCLK4 to TC4 and TC5
-  REG_GCLK_CLKCTRL = GCLK_CLKCTRL_CLKEN |         // Enable GCLK4 to TC4 and TC5
-                     GCLK_CLKCTRL_GEN_GCLK4 |     // Select GCLK4
-                     GCLK_CLKCTRL_ID_TC4_TC5;     // Feed the GCLK4 to TC4 and TC5
-  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
- 
-  REG_TC4_CTRLA |= TC_CTRLA_MODE_COUNT8;           // Set the counter to 8-bit mode
-  while (TC4->COUNT8.STATUS.bit.SYNCBUSY);        // Wait for synchronization
-
-  REG_TC4_COUNT8_CC0 = 0x55;                      // Set the TC4 CC0 register to some arbitary value
-  while (TC4->COUNT8.STATUS.bit.SYNCBUSY);        // Wait for synchronization
-  REG_TC4_COUNT8_CC1 = 0xAA;                      // Set the TC4 CC1 register to some arbitary value
-  while (TC4->COUNT8.STATUS.bit.SYNCBUSY);        // Wait for synchronization
-  REG_TC4_COUNT8_PER = 0xFF;                      // Set the PER (period) register to its maximum value
-  while (TC4->COUNT8.STATUS.bit.SYNCBUSY);        // Wait for synchronization
-
-  //NVIC_DisableIRQ(TC4_IRQn);
-  //NVIC_ClearPendingIRQ(TC4_IRQn);
-  NVIC_SetPriority(TC4_IRQn, 0);    // Set the Nested Vector Interrupt Controller (NVIC) priority for TC4 to 0 (highest)
-  NVIC_EnableIRQ(TC4_IRQn);         // Connect TC4 to Nested Vector Interrupt Controller (NVIC)
-
-  REG_TC4_INTFLAG |= TC_INTFLAG_MC1 | TC_INTFLAG_MC0 | TC_INTFLAG_OVF;        // Clear the interrupt flags
-  REG_TC4_INTENSET = TC_INTENSET_MC1 | TC_INTENSET_MC0 | TC_INTENSET_OVF;     // Enable TC4 interrupts
-  // REG_TC4_INTENCLR = TC_INTENCLR_MC1 | TC_INTENCLR_MC0 | TC_INTENCLR_OVF;     // Disable TC4 interrupts
- 
-  REG_TC4_CTRLA |= TC_CTRLA_PRESCALER_DIV64 |     // Set prescaler to 64, 16MHz/64 = 256kHz
-                   TC_CTRLA_ENABLE;               // Enable TC4
-  while (TC4->COUNT8.STATUS.bit.SYNCBUSY);        // Wait for synchronization
+  //zt3.setCompare(0, 0xFFFF/2);
+  zt3.setPeriodMatch(0xFF, 1, 0);
+  zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, Timer3Callback0);
+  zt3.enable(true);
 }
 
-void TC4_Handler()                              // Interrupt Service Routine (ISR) for timer TC4
-{     
-  // Check for overflow (OVF) interrupt
-  if (TC4->COUNT8.INTFLAG.bit.OVF && TC4->COUNT8.INTENSET.bit.OVF)             
-  {
-    REG_TC4_INTFLAG = TC_INTFLAG_OVF;         // Clear the OVF interrupt flag
+void TC3_Handler() {
+  Adafruit_ZeroTimer::timerHandler(3);
+}
+
+void Timer3Callback0() {
+  statusLEDCounter++;
+
+  const int interval = getStatusLEDInterval();
+  if (interval == 0) {
+    statusLEDCounter = 0;
+    statusLEDState = HIGH;
+    digitalWrite(statusLEDPin, statusLEDState);
   }
-
-  // Check for match counter 0 (MC0) interrupt
-  if (TC4->COUNT8.INTFLAG.bit.MC0 && TC4->COUNT8.INTENSET.bit.MC0)             
-  {
-    REG_TC4_INTFLAG = TC_INTFLAG_MC0;         // Clear the MC0 interrupt flag
-  }
-
-  // Check for match counter 1 (MC1) interrupt
-  if (TC4->COUNT8.INTFLAG.bit.MC1 && TC4->COUNT8.INTENSET.bit.MC1)           
-  {
-    statusLEDCounter++;
-
-    const int interval = getStatusLEDInterval();
-    if (interval == 0) {
-      statusLEDCounter = 0;
-      statusLEDState = HIGH;
-      digitalWrite(statusLEDPin, statusLEDState);
-    }
-    else if (statusLEDCounter >= interval) {
-      statusLEDCounter = 0;
-      statusLEDState ^= 1;
-      digitalWrite(statusLEDPin, statusLEDState);
-    }
-   
-    REG_TC4_INTFLAG = TC_INTFLAG_MC1;        // Clear the MC1 interrupt flag
+  else if (statusLEDCounter >= interval) {
+    statusLEDCounter = 0;
+    statusLEDState ^= 1;
+    digitalWrite(statusLEDPin, statusLEDState);
   }
 }
 
+
+// One unit is approximately 2.5ms
 int getStatusLEDInterval() {
   switch (programState) {
-    case INITIALIZING: return 500;
+    case INITIALIZING: return 40;
     case CONNECTED:    return 0;
-    case DISCONNECTED: return 2000;
+    case DISCONNECTED: return 800;
     case SENDING:      return 100;
     case ERROR0:       return 200;
   }
