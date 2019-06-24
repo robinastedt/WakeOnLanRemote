@@ -28,7 +28,7 @@ volatile byte statusLEDState = LOW;
 int statusLEDCounter = 0;
 const int buttonPollingInterval = 100;
 
-Adafruit_ZeroTimer zt3 = Adafruit_ZeroTimer(3);
+Adafruit_ZeroTimer zt4 = Adafruit_ZeroTimer(4);
 
 enum PROGRAM_STATE {
   INITIALIZING,
@@ -106,21 +106,28 @@ void setup() {
 }
 
 void initializeTimer() {
-  zt3.configure((tc_clock_prescaler)(384), // Emulating TC_CLOCK_PRESCALER_DIV3 for 48MHz clock
-                TC_COUNTER_SIZE_16BIT,
-                TC_WAVE_GENERATION_NORMAL_FREQ
-  );
+  const static int period_us = 10000; // 100 Hz
+  const static int basePeriodCounter = F_CPU / 1000000 * period_us;
+  int periodCounter = basePeriodCounter;
+  int divisions = 0;
+  while (periodCounter > 0xFFFF) {
+    periodCounter >>= 1;
+    divisions++;
+  }
+  int pulseCounter = periodCounter / 2;
+  enum tc_clock_prescaler prescaler = (enum tc_clock_prescaler)TC_CTRLA_PRESCALER(divisions);
 
-  zt3.setPeriodMatch(0xFF, 1, 0);
-  zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, Timer3Callback0);
-  zt3.enable(true);
+  zt4.configure(prescaler, TC_COUNTER_SIZE_16BIT, TC_WAVE_GENERATION_MATCH_PWM);
+  zt4.setPeriodMatch(periodCounter, pulseCounter, 1);
+  zt4.setCallback(true, TC_CALLBACK_CC_CHANNEL1, Timer4Callback1);
+  zt4.enable(true);
 }
 
-void TC3_Handler() {
-  Adafruit_ZeroTimer::timerHandler(3);
+void TC4_Handler() {
+  Adafruit_ZeroTimer::timerHandler(4);
 }
 
-void Timer3Callback0() {
+void Timer4Callback1() {
   statusLEDCounter++;
 
   const int interval = getStatusLEDInterval();
@@ -137,14 +144,14 @@ void Timer3Callback0() {
 }
 
 
-// One unit is approximately 2.5ms
+// Interval is in 100th of seconds
 int getStatusLEDInterval() {
   switch (programState) {
-    case INITIALIZING: return 40;
+    case INITIALIZING: return 10;
     case CONNECTED:    return 0;
-    case DISCONNECTED: return 800;
-    case SENDING:      return 100;
-    case ERROR0:       return 200;
+    case DISCONNECTED: return 200;
+    case SENDING:      return 25;
+    case ERROR0:       return 50;
   }
 }
 
