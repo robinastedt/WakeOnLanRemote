@@ -38,7 +38,6 @@ enum PROGRAM_STATE {
 
 const unsigned int portListen = 5612;
 const unsigned int portBroadcast = 5611;
-const IPAddress ipBroadcast(10, 0, 0, 255);
 WiFiUDP udp;
 
 void setup() {
@@ -255,7 +254,7 @@ void sendMagicPacket(int target) {
     Serial.print(target, DEC);
     Serial.println("...");
   }
-  udp.beginPacket(ipBroadcast, portBroadcast);
+  udp.beginPacket(getSubnetBroadcastAddress(), portBroadcast);
   if (DEBUG) {
     Serial.println("Raw data:");
 
@@ -290,6 +289,17 @@ void sendMagicPacket(int target) {
   udp.endPacket();
   if (DEBUG) Serial.println("Magic packet sent!");
 }
+
+IPAddress getSubnetBroadcastAddress() {
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress ip = WiFi.localIP();
+  IPAddress broadcast;
+  for (int i = 0; i < 4; i++) {
+    broadcast[i] = (mask[i] & ip[i]) | (~(mask[i]));
+  }
+  return broadcast;
+}
+
 
 void printTargetMAC() {
   char targetMACstr[6*3];
@@ -341,6 +351,8 @@ void printWiFiInfo() {
   printSignalStrength();
   printEncryptionType();
   printIP();
+  printSubnetMask();
+  printBroadcastAddress();
   printMacAddress();
 }
 
@@ -349,6 +361,18 @@ void printIP() {
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
+}
+
+void printSubnetMask() {
+  IPAddress subnet = WiFi.subnetMask();
+  Serial.print("Subnet mask: ");
+  Serial.println(subnet);
+}
+
+void printBroadcastAddress() {
+  IPAddress broadcast = getSubnetBroadcastAddress();
+  Serial.print("Broadcast address: ");
+  Serial.println(broadcast);
 }
 
 void printSSID() {
