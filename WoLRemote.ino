@@ -2,7 +2,6 @@
 #include <SPI.h>
 #include <WiFi101.h>
 #include <WiFiUdp.h>
-#include <avr/interrupt.h>
 
 #include "arduino_secrets.h"
 
