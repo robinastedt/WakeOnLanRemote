@@ -106,12 +106,11 @@ void setup() {
 }
 
 void initializeTimer() {
-  zt3.configure((tc_clock_prescaler)(384),//TC_CLOCK_PRESCALER_DIV2,
+  zt3.configure((tc_clock_prescaler)(384), // Emulating TC_CLOCK_PRESCALER_DIV3 for 48MHz clock
                 TC_COUNTER_SIZE_16BIT,
                 TC_WAVE_GENERATION_NORMAL_FREQ
   );
 
-  //zt3.setCompare(0, 0xFFFF/2);
   zt3.setPeriodMatch(0xFF, 1, 0);
   zt3.setCallback(true, TC_CALLBACK_CC_CHANNEL0, Timer3Callback0);
   zt3.enable(true);
