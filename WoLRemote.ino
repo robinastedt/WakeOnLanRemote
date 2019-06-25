@@ -246,7 +246,7 @@ IPAddress getSubnetBroadcastAddress() {
   IPAddress ip = WiFi.localIP();
   IPAddress broadcast;
   for (int i = 0; i < 4; i++) {
-    broadcast[i] = (mask[i] & ip[i]) | (~(mask[i]));
+    broadcast[i] = ip[i] | ~mask[i];
   }
   return broadcast;
 }
