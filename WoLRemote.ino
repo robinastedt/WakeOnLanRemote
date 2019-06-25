@@ -13,15 +13,15 @@ const unsigned int baudRate = 19200;
 const char ssid[] = SECRET_SSID;
 const char pass[] = SECRET_PASS;
 
-byte targetMAC1[6];
-byte targetMAC2[6];
+const int maxTargets = 2;
+byte targetMAC[maxTargets][6];
 
 int status = WL_IDLE_STATUS;
 const int statusPollingInterval = 10000;
 int statusPollingCounter = 0;
 
+volatile byte button0State = LOW;
 volatile byte button1State = LOW;
-volatile byte button2State = LOW;
 volatile byte statusLEDState = LOW;
 int statusLEDCounter = 0;
 const int buttonPollingInterval = 100;
@@ -51,8 +51,8 @@ void setup() {
   
   pinMode(statusLEDPin, OUTPUT);
   digitalWrite(statusLEDPin, LOW);
+  pinMode(button0Pin, INPUT_PULLUP);
   pinMode(button1Pin, INPUT_PULLUP);
-  pinMode(button2Pin, INPUT_PULLUP);
 
   initializeTimer();
   
@@ -92,8 +92,8 @@ void setup() {
     Serial.println(portListen, DEC);
   }
   
+  attachInterrupt(digitalPinToInterrupt(button0Pin), button0Interrupt, RISING);
   attachInterrupt(digitalPinToInterrupt(button1Pin), button1Interrupt, RISING);
-  attachInterrupt(digitalPinToInterrupt(button2Pin), button2Interrupt, RISING);
 
   programState = CONNECTED;
 
@@ -154,20 +154,20 @@ int getStatusLEDInterval() {
 }
 
 void loop() {
+  if (button0State == HIGH) {
+    if (DEBUG) Serial.println();
+    sendMagicPacket(0);
+  }
   if (button1State == HIGH) {
     if (DEBUG) Serial.println();
     sendMagicPacket(1);
   }
-  if (button2State == HIGH) {
-    if (DEBUG) Serial.println();
-    sendMagicPacket(2);
-  }
 
-  if (button1State == HIGH || button2State == HIGH) {
+  if (button0State == HIGH || button1State == HIGH) {
     delay(1000);
     checkWiFiConnection();
+    button0State = LOW;
     button1State = LOW;
-    button2State = LOW;
   }
     
   delay(buttonPollingInterval);
@@ -197,12 +197,12 @@ void checkWiFiConnection() {
   }
 }
 
-void button1Interrupt() {
-  button1State = HIGH;
+void button0Interrupt() {
+  button0State = HIGH;
 }
 
-void button2Interrupt() {
-  button2State = HIGH;
+void button1Interrupt() {
+  button1State = HIGH;
 }
 
 
@@ -226,25 +226,14 @@ void sendMagicPacket(int target) {
   udp.write(header, 6);
   
   if (DEBUG) {
-    if (target == 1) {
-      bytesToStr(strBuf, targetMAC1, 6);
-    }
-    else {
-      bytesToStr(strBuf, targetMAC2, 6);
-    }
+    bytesToStr(strBuf, targetMAC[target], 6);
   }
   for (int i = 0; i < 16; i++) {
     if (DEBUG) {
       Serial.print(":");
       Serial.print(strBuf);
     }
-    if (target == 1) {
-      udp.write(targetMAC1, 6);
-    }
-    else {
-      udp.write(targetMAC2, 6);
-    }
-    
+    udp.write(targetMAC[target], 6);
   }
   if (DEBUG) Serial.println();
 
@@ -264,26 +253,21 @@ IPAddress getSubnetBroadcastAddress() {
 
 
 void printTargetMAC() {
-  char targetMACstr[6*3];
-  bytesToStr(targetMACstr, targetMAC1, 6);
-  Serial.print("Target 1 MAC: ");
-  Serial.println(targetMACstr);
-  bytesToStr(targetMACstr, targetMAC2, 6);
-  Serial.print("Target 2 MAC: ");
-  Serial.println(targetMACstr);
+  for (int i = 0; i < maxTargets; i++) {
+    char targetMACstr[6*3];
+    bytesToStr(targetMACstr, targetMAC[i], 6);
+    Serial.print("Target ");
+    Serial.print(i, DEC);
+    Serial.print(" MAC: ");
+    Serial.println(targetMACstr);
+  }
 }
 
 void parseTargetMAC() {
-  {
-    const char macStr[] = TARGET_MAC_1;
-    for (int i = 0; i < 6; i++) {
-      targetMAC1[i] = strToByte(macStr + i * 3);
-    }
-  }
-  {
-    const char macStr[] = TARGET_MAC_2;
-    for (int i = 0; i < 6; i++) {
-      targetMAC2[i] = strToByte(macStr + i * 3);
+  const char macStrings[maxTargets][6*3] = {TARGET_MACS};
+  for (int i = 0; i < maxTargets; i++) {
+    for (int j = 0; j < 6; j++) {
+      targetMAC[i][j] = strToByte(macStrings[i] + j * 3);
     }
   }
 }
