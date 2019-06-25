@@ -4,7 +4,8 @@
 #include <WiFiUdp.h>
 #include <Adafruit_ZeroTimer.h>
 
-#include "arduino_secrets.h"
+#include "wiring.h"
+#include "secrets.h"
 
 const bool DEBUG = false;
 const unsigned int baudRate = 19200;
@@ -19,9 +20,6 @@ int status = WL_IDLE_STATUS;
 const int statusPollingInterval = 10000;
 int statusPollingCounter = 0;
 
-const byte button1Pin = 4;
-const byte button2Pin = 0;
-const byte statusLEDPin = 6;
 volatile byte button1State = LOW;
 volatile byte button2State = LOW;
 volatile byte statusLEDState = LOW;
