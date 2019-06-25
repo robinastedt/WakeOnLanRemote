@@ -4,8 +4,8 @@
 #include <WiFiUdp.h>
 #include <Adafruit_ZeroTimer.h>
 
-#include "wiring.h"
-#include "secrets.h"
+#include "wiring_private.h"
+#include "secrets_private.h"
 
 const bool DEBUG = false;
 const unsigned int baudRate = 19200;
